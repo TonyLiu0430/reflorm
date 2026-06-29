@@ -76,11 +76,71 @@ consteval auto append_column_definition(sql_string& sql) -> void {
     sql.push_back(' ');
     sql.append(sqlite_type_name_of<Field>());
 
-    if (has_annotation(Field, ^^primary_key)) {
+    if (is_primary_key_field(Field)) {
         sql.append(" PRIMARY KEY");
     } else if (!sqlite_field_is_nullable<Field>()) {
         sql.append(" NOT NULL");
     }
+
+    if (is_unique_field(Field)) {
+        sql.append(" UNIQUE");
+    }
+}
+
+template<std::meta::info Model>
+consteval auto field_primary_key_count() -> std::size_t {
+    std::size_t count = 0;
+    for (auto field : std::meta::nonstatic_data_members_of(
+             Model,
+             std::meta::access_context::unchecked())) {
+        if (is_relation_field(field) || has_annotation(field, ^^ignore)) {
+            continue;
+        }
+
+        if (is_primary_key_field(field)) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+template<std::meta::info Model>
+consteval auto composite_id_count() -> std::size_t {
+    std::size_t count = 0;
+    for (auto member : std::meta::members_of(Model, std::meta::access_context::unchecked())) {
+        if (is_model_constraint_member(member) && !std::meta::annotations_of_with_type(member, ^^id).empty()) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+template<class Dialect, std::meta::info Model>
+consteval auto append_constraint_field_list(sql_string& sql, constraint_fields const& fields) -> void {
+    for (std::size_t index = 0; index < fields.field_count; ++index) {
+        if (index != 0) {
+            sql.append(", ");
+        }
+
+        auto field = model_field_named(Model, fields.fields[index]);
+        Dialect::append_identifier(sql, column_name_of(field).view());
+    }
+}
+
+template<class Dialect, std::meta::info Model>
+consteval auto append_composite_id_definition(sql_string& sql, id const& annotation) -> void {
+    sql.append("PRIMARY KEY (");
+    append_constraint_field_list<Dialect, Model>(sql, annotation);
+    sql.push_back(')');
+}
+
+template<class Dialect, std::meta::info Model>
+consteval auto append_composite_unique_definition(sql_string& sql, unique const& annotation) -> void {
+    sql.append("UNIQUE (");
+    append_constraint_field_list<Dialect, Model>(sql, annotation);
+    sql.push_back(')');
 }
 
 template<class Dialect, std::meta::info Field>
@@ -103,6 +163,12 @@ template<class Dialect, std::meta::info Model, bool IfNotExists>
 consteval auto make_create_table_sql() -> sql_string {
     if (!std::meta::is_type(Model) || !std::meta::is_class_type(Model) || !std::meta::is_complete_type(Model)) {
         throw "cpporm create_table model must be a complete class type";
+    }
+
+    validate_model_constraints(Model);
+
+    if constexpr (field_primary_key_count<Model>() + composite_id_count<Model>() > 1) {
+        throw "cpporm model must not have multiple id annotations";
     }
 
     sql_string sql{};
@@ -144,6 +210,38 @@ consteval auto make_create_table_sql() -> sql_string {
         }
 
         append_foreign_key_definition<Dialect, field>(sql);
+    }
+
+    static constexpr auto members = std::define_static_array(std::meta::members_of(
+        Model,
+        std::meta::access_context::unchecked()
+    ));
+    template for (constexpr std::meta::info member : members) {
+        if constexpr (!is_model_constraint_member(member)) {
+            continue;
+        }
+
+        if constexpr (has_annotation(member, ^^id)) {
+            if (first) {
+                first = false;
+            } else {
+                sql.append(", ");
+            }
+
+            auto id_annotations = std::meta::annotations_of_with_type(member, ^^id);
+            append_composite_id_definition<Dialect, Model>(sql, std::meta::extract<id>(id_annotations.front()));
+        }
+
+        if constexpr (has_annotation(member, ^^unique)) {
+            if (first) {
+                first = false;
+            } else {
+                sql.append(", ");
+            }
+
+            auto unique_annotations = std::meta::annotations_of_with_type(member, ^^unique);
+            append_composite_unique_definition<Dialect, Model>(sql, std::meta::extract<unique>(unique_annotations.front()));
+        }
     }
 
     if (first) {

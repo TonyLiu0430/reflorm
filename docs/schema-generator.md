@@ -7,8 +7,9 @@
 - `cpporm::sqlite::create_table<Model>()` 產生單一 model 的 `CREATE TABLE` SQL。
 - `cpporm::sqlite::create_table_if_not_exists<Model>()` 產生安全建表 SQL。
 - `cpporm::sqlite::create_schema<^^namespace>()` 產生 namespace 內所有 direct model 的 schema plan。
-- 支援 `table`、`column`、`primary_key`、`ignore`。
+- 支援 `table`、`column`、`id`、`primary_key`、`unique`、`ignore`。
 - 支援 `references<cpporm::fields<T>.id>{}` 產生 foreign key constraint。
+- 支援 `static constexpr cpporm::model_constraint` 上的複合 `id{"..."}` / `unique{"..."}`。
 - relation marker fields：`relation<T>`、`has_many<T>` 不產生 column。
 - 第一版所有非 primary-key scalar column 都產生 `NOT NULL`。
 
@@ -18,8 +19,8 @@
 - 不做 schema diff。
 - 不做 table/column rename 偵測。
 - 不做 destructive migration。
-- 不支援 composite key。
-- 不支援 index/unique/check/default value。
+- 不支援 composite foreign key / relation。
+- 不支援 index/check/default value。
 - 不支援 nullable/optional column。
 
 ## 基本語法
@@ -32,6 +33,42 @@ constexpr auto sql = cpporm::sqlite::create_table<user>();
 
 ```sql
 CREATE TABLE "users" ("user_id" INTEGER PRIMARY KEY, "email" TEXT NOT NULL)
+```
+
+單欄位 unique：
+
+```cpp
+struct account {
+    [[=cpporm::id{}]]
+    std::int64_t id;
+
+    [[=cpporm::unique{}]]
+    std::string email;
+};
+```
+
+```sql
+CREATE TABLE "account" ("id" INTEGER PRIMARY KEY, "email" TEXT NOT NULL UNIQUE)
+```
+
+複合 constraint：
+
+```cpp
+struct project {
+    std::int64_t tenant_id;
+    std::string slug;
+    std::string name;
+
+    [[=cpporm::id{"tenant_id", "slug"}]]
+    static constexpr cpporm::model_constraint _id{};
+
+    [[=cpporm::unique{"tenant_id", "name"}]]
+    static constexpr cpporm::model_constraint _unique_name{};
+};
+```
+
+```sql
+CREATE TABLE "project" ("tenant_id" INTEGER NOT NULL, "slug" TEXT NOT NULL, "name" TEXT NOT NULL, PRIMARY KEY ("tenant_id", "slug"), UNIQUE ("tenant_id", "name"))
 ```
 
 有 reference 時：

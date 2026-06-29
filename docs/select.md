@@ -22,7 +22,7 @@
 ```cpp
 namespace models {
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::column{"display_name"}]]

@@ -17,13 +17,14 @@
 ```cpp
 namespace models {
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
+
+    [[=cpporm::unique{}]]
+    std::string email;
 
     [[=cpporm::column{"display_name"}]]
     std::string name;
-
-    std::string email;
 };
 }
 ```
@@ -32,7 +33,8 @@ struct [[=cpporm::table{"users"}]] user {
 
 - `[[=cpporm::table{"users"}]]` 指定 table 名稱。
 - `[[=cpporm::column{"user_id"}]]` 指定 column 名稱。
-- `[[=cpporm::primary_key{}]]` 指定 primary key。
+- `[[=cpporm::id{}]]` 指定 primary key。
+- `[[=cpporm::unique{}]]` 指定單欄位 unique constraint。
 - 沒有 `column` annotation 的 field 預設使用反射取得的 field identifier。
 
 ## Namespace 註冊
@@ -67,7 +69,7 @@ std::meta::is_type(member)
 ```cpp
 namespace models {
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::primary_key{}]]
+    [[=cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::ignore{}]]
@@ -75,6 +77,33 @@ struct [[=cpporm::table{"users"}]] user {
 };
 }
 ```
+
+## 複合 Constraint
+
+複合 key / unique 不放在 `struct [[=...]]` 位置，也不使用 non-static dummy member。使用 `static constexpr cpporm::model_constraint` 承載 annotation：
+
+```cpp
+namespace models {
+struct project {
+    std::int64_t tenant_id;
+    std::string slug;
+    std::string name;
+
+    [[=cpporm::id{"tenant_id", "slug"}]]
+    static constexpr cpporm::model_constraint _id{};
+
+    [[=cpporm::unique{"tenant_id", "name"}]]
+    static constexpr cpporm::model_constraint _unique_name{};
+};
+}
+```
+
+規則：
+
+- 單欄位 constraint 放在 field annotation。
+- 複合 constraint 放在 model block 底部的 `static constexpr` dummy member。
+- `model_constraint` dummy 不佔 instance layout，不產生 column。
+- annotation payload 內的 field name 會在 compile time 檢查。
 
 規則：
 

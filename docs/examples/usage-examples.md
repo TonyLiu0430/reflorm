@@ -27,16 +27,17 @@ namespace models {
 struct post;
 
 struct user {
-    [[=cpporm::primary_key{}]]
+    [[=cpporm::id{}]]
     std::int64_t id;
 
+    [[=cpporm::unique{}]]
     std::string email;
 
     cpporm::has_many<post> posts;
 };
 
 struct post {
-    [[=cpporm::primary_key{}]]
+    [[=cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::references<cpporm::fields<user>.id>{}]]
@@ -55,7 +56,8 @@ struct post {
 - `user`、`post` 都是 plain struct。
 - table 名稱預設是 struct identifier：`user`、`post`。
 - column 名稱預設是 field identifier：`id`、`email`、`author_id`、`title`。
-- `primary_key` 是資料語意，不是命名設定。
+- `id` 是資料語意，不是命名設定；它是 Prisma-like 的 primary key 標記。
+- `unique` 標記單欄位唯一性，schema generator 會產生 `UNIQUE`。
 - `references` 描述 DB-level foreign key。
 - `has_many<T>` 與 `relation<T>` 描述 domain-level relation，不會被當成資料表 column。
 
@@ -65,7 +67,7 @@ struct post {
 
 ```cpp
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::column{"display_name"}]]
@@ -74,6 +76,40 @@ struct [[=cpporm::table{"users"}]] user {
 ```
 
 這段不是主要範例的預設寫法。cpporm 的偏好是先讓 C++ identifier 成為 metadata source；只有遇到 legacy schema、複數 table name 或命名慣例不同時才加 rename annotation。
+
+## 複合 Constraint
+
+單欄位 constraint 放在 field annotation 上：
+
+```cpp
+struct user {
+    [[=cpporm::id{}]]
+    std::int64_t id;
+
+    [[=cpporm::unique{}]]
+    std::string email;
+};
+```
+
+複合 constraint 則放在 `static constexpr cpporm::model_constraint` dummy member 上：
+
+```cpp
+struct project {
+    std::int64_t tenant_id;
+    std::string slug;
+    std::string name;
+
+    [[=cpporm::id{"tenant_id", "slug"}]]
+    static constexpr cpporm::model_constraint _id{};
+
+    [[=cpporm::unique{"tenant_id", "name"}]]
+    static constexpr cpporm::model_constraint _unique_name{};
+};
+```
+
+這個 dummy member 必須是 `static constexpr`，因此不佔每個 entity object 的空間，也不參與 aggregate 初始化、select 或 mutation payload。它的用途只是在 model block 底部承載 Prisma-like 的 `@@id([...])` / `@@unique([...])` 語意。
+
+目前複合 constraint 已支援 schema SQL 產生；mutation 的 `update` / `upsert` 第一版仍只支援單欄位 id。
 
 ## Namespace 註冊
 

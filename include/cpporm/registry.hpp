@@ -15,6 +15,29 @@ consteval auto has_annotation(std::meta::info item, std::meta::info annotation_t
     return !std::meta::annotations_of_with_type(item, annotation_type).empty();
 }
 
+consteval auto is_primary_key_field(std::meta::info field) -> bool {
+    return has_annotation(field, ^^primary_key) || has_annotation(field, ^^id);
+}
+
+consteval auto is_unique_field(std::meta::info field) -> bool {
+    return has_annotation(field, ^^unique);
+}
+
+consteval auto is_model_constraint_member(std::meta::info member) -> bool {
+    return (std::meta::is_variable(member) || std::meta::is_nonstatic_data_member(member))
+        && std::meta::dealias(std::meta::remove_cvref(std::meta::type_of(member))) == ^^model_constraint;
+}
+
+consteval auto field_id_annotation_is_valid(std::meta::info field) -> bool {
+    auto annotations = std::meta::annotations_of_with_type(field, ^^id);
+    return annotations.empty() || std::meta::extract<id>(annotations.front()).field_count == 0;
+}
+
+consteval auto field_unique_annotation_is_valid(std::meta::info field) -> bool {
+    auto annotations = std::meta::annotations_of_with_type(field, ^^unique);
+    return annotations.empty() || std::meta::extract<unique>(annotations.front()).field_count == 0;
+}
+
 consteval auto is_direct_struct_model(std::meta::info item) -> bool {
     return std::meta::is_type(item)
         && std::meta::is_class_type(item)
@@ -213,7 +236,8 @@ consteval auto describe_model(std::meta::info namespace_info, std::meta::info mo
         descriptor.fields[descriptor.field_count] = field_descriptor{
             .member_name = fixed_string{std::meta::identifier_of(field)},
             .column_name = column_name_of(field),
-            .primary_key = has_annotation(field, ^^primary_key),
+            .primary_key = is_primary_key_field(field),
+            .unique = is_unique_field(field),
             .ignored = has_annotation(field, ^^ignore),
             .has_reference = referenced_field != std::meta::info{},
             .referenced_model_name = referenced_model == std::meta::info{} ? fixed_string{} : fixed_string{std::meta::identifier_of(referenced_model)},
@@ -277,7 +301,83 @@ consteval auto validate_model_references(std::meta::info namespace_info, std::me
     for (auto field : std::meta::nonstatic_data_members_of(
              model,
              std::meta::access_context::unchecked())) {
+        if (!field_id_annotation_is_valid(field)) {
+            throw "cpporm field id annotation must not list fields";
+        }
+
+        if (!field_unique_annotation_is_valid(field)) {
+            throw "cpporm field unique annotation must not list fields";
+        }
+
         validate_reference(namespace_info, field);
+    }
+}
+
+consteval auto model_field_named(std::meta::info model, fixed_string const& name) -> std::meta::info {
+    std::meta::info result{};
+    for (auto field : std::meta::nonstatic_data_members_of(
+             model,
+             std::meta::access_context::unchecked())) {
+        if (!std::meta::has_identifier(field) || std::meta::identifier_of(field) != name.view()) {
+            continue;
+        }
+
+        if (result != std::meta::info{}) {
+            throw "cpporm constraint field is ambiguous";
+        }
+
+        result = field;
+    }
+
+    if (result == std::meta::info{}) {
+        throw "cpporm constraint references unknown field";
+    }
+
+    if (has_annotation(result, ^^ignore) || is_relation_field(result)) {
+        throw "cpporm constraint field must be persisted scalar field";
+    }
+
+    return result;
+}
+
+consteval auto validate_constraint_fields(std::meta::info model, constraint_fields const& fields) -> void {
+    if (fields.field_count < 2) {
+        throw "cpporm composite constraint requires at least two fields";
+    }
+
+    for (std::size_t index = 0; index < fields.field_count; ++index) {
+        (void)model_field_named(model, fields.fields[index]);
+        for (std::size_t right = index + 1; right < fields.field_count; ++right) {
+            if (fields.fields[index].view() == fields.fields[right].view()) {
+                throw "cpporm composite constraint must not repeat fields";
+            }
+        }
+    }
+}
+
+consteval auto validate_model_constraints(std::meta::info model) -> void {
+    for (auto member : std::meta::members_of(model, std::meta::access_context::unchecked())) {
+        if (!is_model_constraint_member(member)) {
+            continue;
+        }
+
+        if (std::meta::is_nonstatic_data_member(member)) {
+            throw "cpporm model_constraint must be static constexpr";
+        }
+
+        auto id_annotations = std::meta::annotations_of_with_type(member, ^^id);
+        auto unique_annotations = std::meta::annotations_of_with_type(member, ^^unique);
+        if (!id_annotations.empty() && !unique_annotations.empty()) {
+            throw "cpporm model_constraint must have exactly one constraint annotation";
+        }
+
+        if (!id_annotations.empty()) {
+            validate_constraint_fields(model, std::meta::extract<id>(id_annotations.front()));
+        }
+
+        if (!unique_annotations.empty()) {
+            validate_constraint_fields(model, std::meta::extract<unique>(unique_annotations.front()));
+        }
     }
 }
 
@@ -298,6 +398,7 @@ consteval auto register_namespace(std::meta::info namespace_info) -> registry_de
         }
 
         validate_model_references(namespace_info, member);
+        validate_model_constraints(member);
         registry.models[registry.model_count] = describe_model(namespace_info, member);
         ++registry.model_count;
     }

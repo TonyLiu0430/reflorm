@@ -9,6 +9,8 @@ inline constexpr std::size_t max_sql_size = 1024;
 inline constexpr std::size_t max_registered_models = 64;
 inline constexpr std::size_t max_model_fields = 64;
 inline constexpr std::size_t max_model_relations = 64;
+inline constexpr std::size_t max_model_constraints = 16;
+inline constexpr std::size_t max_constraint_fields = 8;
 inline constexpr std::size_t dynamic_extent = static_cast<std::size_t>(-1);
 
 } // namespace cpporm

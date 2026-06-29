@@ -17,12 +17,13 @@
 namespace models {
 
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::column{"display_name"}]]
     std::string name;
 
+    [[=cpporm::unique{}]]
     std::string email;
 
     [[=cpporm::ignore{}]]
@@ -88,6 +89,7 @@ TEST_CASE("register_namespace reads field annotations") {
     static_assert(basic_registry().models[0].fields[2].member_name == "email");
     static_assert(basic_registry().models[0].fields[2].column_name == "email");
     static_assert(!basic_registry().models[0].fields[2].primary_key);
+    static_assert(basic_registry().models[0].fields[2].unique);
     static_assert(!basic_registry().models[0].fields[2].ignored);
 
     static_assert(basic_registry().models[0].fields[3].member_name == "dirty");

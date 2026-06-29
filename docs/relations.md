@@ -25,7 +25,7 @@ namespace models {
 struct [[=cpporm::table{"users"}]] user;
 
 struct [[=cpporm::table{"posts"}]] post {
-    [[=cpporm::column{"post_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"post_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::column{"author_id"}, =cpporm::references<cpporm::fields<user>.id>{}]]
@@ -35,7 +35,7 @@ struct [[=cpporm::table{"posts"}]] post {
 };
 
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     cpporm::has_many<post> posts;
@@ -82,7 +82,7 @@ SELECT ... FROM "posts" WHERE "author_id" IN (?, ?, ...);
 - relation target model 必須在同一 namespace 註冊。
 - `relation<T>` 的 source model 必須有唯一 field reference 到 `T`。
 - `has_many<T>` 的 target model 必須有唯一 field reference 回 source model。
-- relation field 不可同時標成 `column`、`primary_key` 或 `references`。
+- relation field 不可同時標成 `column`、`id`、`primary_key` 或 `references`。
 
 ## Descriptor
 

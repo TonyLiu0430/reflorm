@@ -49,6 +49,30 @@ struct [[=cpporm::table{"samples"}]] sample {
 
 } // namespace models::schema
 
+namespace models::schema_constraints {
+
+struct account {
+    [[=cpporm::id{}]]
+    std::int64_t id;
+
+    [[=cpporm::unique{}]]
+    std::string email;
+};
+
+struct project {
+    std::int64_t tenant_id;
+    std::string slug;
+    std::string name;
+
+    [[=cpporm::id{"tenant_id", "slug"}]]
+    static constexpr cpporm::model_constraint _id{};
+
+    [[=cpporm::unique{"tenant_id", "name"}]]
+    static constexpr cpporm::model_constraint _unique_name{};
+};
+
+} // namespace models::schema_constraints
+
 using namespace models::schema;
 
 constexpr auto schema_plan = cpporm::sqlite::create_schema<^^models::schema>();
@@ -85,6 +109,18 @@ TEST_CASE("sqlite create_table supports all storage classes") {
     constexpr auto sql = cpporm::sqlite::create_table<sample>();
 
     CHECK(sql == R"(CREATE TABLE "samples" ("sample_id" INTEGER PRIMARY KEY, "flag" INTEGER NOT NULL, "score" REAL NOT NULL, "nickname" TEXT, "payload" BLOB NOT NULL))");
+}
+
+TEST_CASE("sqlite create_table supports id and unique field annotations") {
+    constexpr auto sql = cpporm::sqlite::create_table<models::schema_constraints::account>();
+
+    CHECK(sql == R"(CREATE TABLE "account" ("id" INTEGER PRIMARY KEY, "email" TEXT NOT NULL UNIQUE))");
+}
+
+TEST_CASE("sqlite create_table supports static composite constraints") {
+    constexpr auto sql = cpporm::sqlite::create_table<models::schema_constraints::project>();
+
+    CHECK(sql == R"(CREATE TABLE "project" ("tenant_id" INTEGER NOT NULL, "slug" TEXT NOT NULL, "name" TEXT NOT NULL, PRIMARY KEY ("tenant_id", "slug"), UNIQUE ("tenant_id", "name")))");
 }
 
 TEST_CASE("sqlite create_schema generates all direct model tables") {

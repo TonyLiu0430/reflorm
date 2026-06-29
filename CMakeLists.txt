@@ -189,6 +189,11 @@ if(CPPORM_BUILD_TESTS)
             tests/compile_fail/upsert_payload_without_update_fields.cpp
             "cpporm upsert payload must contain at least one non-primary-key model field"
         )
+        add_cpporm_compile_fail_test(
+            cpporm_compile_fail_model_constraint_must_be_static
+            tests/compile_fail/model_constraint_must_be_static.cpp
+            "cpporm model_constraint must be static constexpr"
+        )
 
         if(CPPORM_RUNTIME_DLL_DIR)
             set_tests_properties(cpporm_tests PROPERTIES

@@ -23,12 +23,12 @@
 namespace models {
 
 struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"user_id"}, =cpporm::id{}]]
     std::int64_t id;
 };
 
 struct [[=cpporm::table{"posts"}]] post {
-    [[=cpporm::column{"post_id"}, =cpporm::primary_key{}]]
+    [[=cpporm::column{"post_id"}, =cpporm::id{}]]
     std::int64_t id;
 
     [[=cpporm::column{"author_id"}, =cpporm::references<cpporm::fields<user>.id>{}]]

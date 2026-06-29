@@ -14,6 +14,7 @@ struct field_descriptor {
     fixed_string member_name;
     fixed_string column_name;
     bool primary_key = false;
+    bool unique = false;
     bool ignored = false;
     bool has_reference = false;
     fixed_string referenced_model_name;

@@ -27,7 +27,7 @@ consteval auto primary_key_field_of() -> std::meta::info {
             continue;
         }
 
-        if constexpr (has_annotation(field, ^^primary_key)) {
+        if constexpr (is_primary_key_field(field)) {
             if (primary_key_field != std::meta::info{}) {
                 throw "cpporm mutation requires exactly one primary key";
             }
