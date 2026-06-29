@@ -1,11 +1,12 @@
 # 使用範例導覽
 
-這份文件從使用者視角展示 cpporm 目前想提供的寫法。重點不是列出所有內部設計，而是呈現這個專案的風格：用標準 C++ 型別描述資料模型，用 annotation 補少量 DB metadata，再讓 reflection 推導出 schema、query、relation 與 result row。
+這份文件從使用者視角展示 cpporm 目前想提供的寫法。重點不是列出所有內部設計，而是呈現這個專案的風格：用標準 C++ 型別描述資料模型，優先依賴 reflection 的預設命名，只在需要語意 metadata 或命名覆寫時使用 annotation，再推導出 schema、query、relation 與 result row。
 
 ## 風格摘要
 
 - Model 仍是普通 C++ `struct`，不是繼承 ORM base class 的 entity。
-- Metadata 放在宣告旁邊，使用 `[[=cpporm::...]]` annotation，不需要另外寫一份 mapping table。
+- 預設 table/column 名稱來自 C++ identifier；rename 是額外 override，不是每個 model 都要寫。
+- 語意 metadata 放在宣告旁邊，使用 `[[=cpporm::...]]` annotation，不需要另外寫一份 mapping table。
 - Namespace 是註冊單位，`register_namespace(^^models)` 會掃描 direct structs。
 - Query API 用 model type 與 field accessor 表達意圖，例如 `cpporm::fields<user>.email`。
 - SQL value 不 inline，永遠產生 placeholder `?` 與 typed bindings。
@@ -25,8 +26,8 @@ namespace models {
 
 struct post;
 
-struct [[=cpporm::table{"users"}]] user {
-    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+struct user {
+    [[=cpporm::primary_key{}]]
     std::int64_t id;
 
     std::string email;
@@ -34,12 +35,12 @@ struct [[=cpporm::table{"users"}]] user {
     cpporm::has_many<post> posts;
 };
 
-struct [[=cpporm::table{"posts"}]] post {
-    [[=cpporm::column{"post_id"}, =cpporm::primary_key{}]]
+struct post {
+    [[=cpporm::primary_key{}]]
     std::int64_t id;
 
-    [[=cpporm::column{"author_id"}, =cpporm::references<cpporm::fields<user>.id>{}]]
-    std::int64_t user_id;
+    [[=cpporm::references<cpporm::fields<user>.id>{}]]
+    std::int64_t author_id;
 
     std::string title;
 
@@ -52,9 +53,27 @@ struct [[=cpporm::table{"posts"}]] post {
 這段展示的風格重點：
 
 - `user`、`post` 都是 plain struct。
-- `table`、`column`、`primary_key` 是必要時才加的 override。
+- table 名稱預設是 struct identifier：`user`、`post`。
+- column 名稱預設是 field identifier：`id`、`email`、`author_id`、`title`。
+- `primary_key` 是資料語意，不是命名設定。
 - `references` 描述 DB-level foreign key。
 - `has_many<T>` 與 `relation<T>` 描述 domain-level relation，不會被當成資料表 column。
+
+## 命名覆寫
+
+如果 DB 命名和 C++ 命名不同，再使用 `table` / `column` annotation 覆寫：
+
+```cpp
+struct [[=cpporm::table{"users"}]] user {
+    [[=cpporm::column{"user_id"}, =cpporm::primary_key{}]]
+    std::int64_t id;
+
+    [[=cpporm::column{"display_name"}]]
+    std::string name;
+};
+```
+
+這段不是主要範例的預設寫法。cpporm 的偏好是先讓 C++ identifier 成為 metadata source；只有遇到 legacy schema、複數 table name 或命名慣例不同時才加 rename annotation。
 
 ## Namespace 註冊
 
@@ -80,8 +99,8 @@ constexpr auto schema = cpporm::sqlite::create_schema<^^models>();
 概念上會得到 safe create plan：
 
 ```sql
-CREATE TABLE IF NOT EXISTS "users" (...)
-CREATE TABLE IF NOT EXISTS "posts" (...)
+CREATE TABLE IF NOT EXISTS "user" (...)
+CREATE TABLE IF NOT EXISTS "post" (...)
 ```
 
 目前 schema generator 偏向安全建立，不做 destructive auto migrate。這讓第一版 API 可以先可靠地描述結構，而不是一開始就自動修改既有資料表。
@@ -103,7 +122,7 @@ constexpr auto query = cpporm::sqlite::select<user>(
 產生的 SQL 形狀：
 
 ```sql
-SELECT "user_id", "email" FROM "users" WHERE "user_id" >= ? ORDER BY "user_id" ASC LIMIT 20
+SELECT "id", "email" FROM "user" WHERE "id" >= ? ORDER BY "id" ASC LIMIT 20
 ```
 
 這段展示的風格重點：
@@ -198,7 +217,7 @@ struct row {
 constexpr auto query = cpporm::sqlite::find_many<post>()
     .select(
         cpporm::fields<post>.id,
-        cpporm::fields<post>.user_id,
+        cpporm::fields<post>.author_id,
         cpporm::fields<post>.title,
         cpporm::relations<post>.author.select(
             cpporm::fields<user>.id,
@@ -303,7 +322,7 @@ if (!inserted_user) {
 
 auto inserted_post = database->insert(post{
     .id = 10,
-    .user_id = 1,
+    .author_id = 1,
     .title = "hello"
 });
 if (!inserted_post) {
