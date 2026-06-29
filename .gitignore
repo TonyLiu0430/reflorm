@@ -1,0 +1,32 @@
+# Build outputs
+out/
+build/
+cmake-build-*/
+
+# CMake local/user files
+CMakeUserPresets.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Compiler/linker outputs
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.ilk
+
+# Local scratch/docs
+.temp/
+docs/core_instruction/
+
+# Editor state
+# .vscode/ is intentionally not ignored.

@@ -1,0 +1,22 @@
+#include <cpporm/cpporm.hpp>
+
+#include <cstdint>
+
+namespace external_models {
+
+struct user {
+    std::int64_t id;
+};
+
+} // namespace external_models
+
+namespace invalid_models {
+
+struct post {
+    [[=cpporm::references<cpporm::fields<external_models::user>.id>{}]]
+    std::int64_t user_id;
+};
+
+} // namespace invalid_models
+
+static_assert(cpporm::register_namespace(^^invalid_models).model_count == 1);
